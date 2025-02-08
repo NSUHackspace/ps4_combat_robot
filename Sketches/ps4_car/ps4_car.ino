@@ -1,13 +1,29 @@
 #include <Bluepad32.h>
 
+// //Right motor
+// int enableRightMotor=12; 
+// int rightMotorPin1=18;
+// int rightMotorPin2=19;
+// //Left motor
+// int enableLeftMotor=13;
+// int leftMotorPin1=23;
+// int leftMotorPin2=5;
+//
+// int ledPin = 2;
+
+
 //Right motor
-int enableRightMotor=22; 
-int rightMotorPin1=16;
-int rightMotorPin2=17;
+int enableRightMotor=12; 
+int rightMotorPin1=14;
+int rightMotorPin2=27;
 //Left motor
 int enableLeftMotor=23;
-int leftMotorPin1=18;
-int leftMotorPin2=19;
+int leftMotorPin1=26;
+int leftMotorPin2=25;
+
+int ledPin = 2;
+
+
 
 const int PWMFreq = 1000; /* 1 KHz */
 const int PWMResolution = 8;
@@ -79,50 +95,6 @@ void dumpGamepad(ControllerPtr ctl) {
 }
 
 void processGamepad(ControllerPtr ctl) {
-    // There are different ways to query whether a button is pressed.
-    // By query each button individually:
-    //  a(), b(), x(), y(), l1(), etc...
-    if (ctl->a()) {
-        static int colorIdx = 0;
-        // Some gamepads like DS4 and DualSense support changing the color LED.
-        // It is possible to change it by calling:
-        switch (colorIdx % 3) {
-            case 0:
-                // Red
-                ctl->setColorLED(255, 0, 0);
-                break;
-            case 1:
-                // Green
-                ctl->setColorLED(0, 255, 0);
-                break;
-            case 2:
-                // Blue
-                ctl->setColorLED(0, 0, 255);
-                break;
-        }
-        colorIdx++;
-    }
-
-    if (ctl->b()) {
-        // Turn on the 4 LED. Each bit represents one LED.
-        static int led = 0;
-        led++;
-        // Some gamepads like the DS3, DualSense, Nintendo Wii, Nintendo Switch
-        // support changing the "Player LEDs": those 4 LEDs that usually indicate
-        // the "gamepad seat".
-        // It is possible to change them by calling:
-        ctl->setPlayerLEDs(led & 0x0f);
-    }
-
-    if (ctl->x()) {
-        // Some gamepads like DS3, DS4, DualSense, Switch, Xbox One S, Stadia support rumble.
-        // It is possible to set it by calling:
-        // Some controllers have two motors: "strong motor", "weak motor".
-        // It is possible to control them independently.
-        ctl->playDualRumble(0 /* delayedStartMs */, 250 /* durationMs */, 0x80 /* weakMagnitude */,
-                            0x40 /* strongMagnitude */);
-    }
-
     // Another way to query controller data is by getting the buttons() function.
     // See how the different "dump*" functions dump the Controller info.
     // dumpGamepad(ctl);
@@ -130,14 +102,36 @@ void processGamepad(ControllerPtr ctl) {
     // ctl->axisRY(),       // (-511 - 512) right Y axis - arm moving
     // ctl->brake(),        // (0 - 1023): brake button - moving back
     // ctl->throttle(),     // (0 - 1023): throttle (AKA gas) button - moving forward
+    // int leftMotorSpeed = ctl->throttle() - ctl->brake();
+    // int rightMotorSpeed = ctl->throttle() - ctl->brake();
+    // // Управляем поворотами
+    // rightMotorSpeed += ctl->axisX() * 2;
+    // leftMotorSpeed -= ctl->axisX() * 2;
+
     int leftMotorSpeed = ctl->throttle() - ctl->brake();
     int rightMotorSpeed = ctl->throttle() - ctl->brake();
     // Управляем поворотами
     rightMotorSpeed += ctl->axisX() * 2;
     leftMotorSpeed -= ctl->axisX() * 2;
 
+    rightMotorSpeed = max(-2047, min(2047, rightMotorSpeed * 2));
+    leftMotorSpeed = max(-2047, min(2047, leftMotorSpeed * 2));
+
     // Передаем управляющие значения в функцию rotateMotor
     rotateMotor(rightMotorSpeed, leftMotorSpeed);
+
+    // indicator led
+    digitalWrite(ledPin, ctl->a());
+
+    if(ctl->miscStart() && ctl->miscSelect()){
+        ctl->playDualRumble(0, 1000, 255, 255);
+        BP32.forgetBluetoothKeys();
+        rotateMotor(0, 0);
+        digitalWrite(ledPin, 1);
+        delay(1500);
+        digitalWrite(ledPin, 0);
+        esp_restart();
+    }
 }
 
 
@@ -201,6 +195,8 @@ void setUpPinModes()
   pinMode(leftMotorPin1,OUTPUT);
   pinMode(leftMotorPin2,OUTPUT);
 
+  pinMode(ledPin, OUTPUT);
+
   //Set up PWM for motor speed
   ledcSetup(rightMotorPWMSpeedChannel, PWMFreq, PWMResolution);
   ledcSetup(leftMotorPWMSpeedChannel, PWMFreq, PWMResolution);  
@@ -220,13 +216,13 @@ void setup() {
 
     // Setup the Bluepad32 callbacks
     BP32.setup(&onConnectedController, &onDisconnectedController);
+    // BP32.forgetBluetoothKeys();
 
     // "forgetBluetoothKeys()" should be called when the user performs
     // a "device factory reset", or similar.
     // Calling "forgetBluetoothKeys" in setup() just as an example.
     // Forgetting Bluetooth keys prevents "paired" gamepads to reconnect.
     // But it might also fix some connection / re-connection issues.
-    BP32.forgetBluetoothKeys();
 
     // Enables mouse / touchpad support for gamepads that support them.
     // When enabled, controllers like DualSense and DualShock4 generate two connected devices:
